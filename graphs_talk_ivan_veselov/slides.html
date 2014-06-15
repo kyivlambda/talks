@@ -1,0 +1,363 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+ "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta http-equiv="Content-Style-Type" content="text/css" />
+  <meta name="generator" content="pandoc" />
+  <meta name="author" content="Ivan Veselov" />
+  <meta name="date" content="2014-06-14" />
+  <title>Graphs: a functional approach</title>
+  <style type="text/css">code{white-space: pre;}</style>
+  <link rel="stylesheet" type="text/css" media="screen, projection, print"
+    href="http://www.w3.org/Talks/Tools/Slidy2/styles/slidy.css" />
+  <script src="http://www.w3.org/Talks/Tools/Slidy2/scripts/slidy.js"
+    charset="utf-8" type="text/javascript"></script>
+</head>
+<body>
+<div class="slide titlepage">
+  <h1 class="title">Graphs: a functional approach</h1>
+  <p class="author">
+Ivan Veselov
+  </p>
+  <p class="date">June 14, 2014</p>
+</div>
+<div id="outline" class="slide section level1">
+<h1>Outline</h1>
+<ul>
+<li><p>Motivation</p></li>
+<li><p>Graph representation options</p></li>
+<li><p>Inductive graphs</p></li>
+</ul>
+</div>
+<div id="two-aspects-of-graph-representation" class="slide section level1">
+<h1>Two aspects of graph representation</h1>
+<ol style="list-style-type: decimal">
+<li><p>Representing graph structure</p></li>
+<li><p>Representing typical graph algorithms</p></li>
+</ol>
+</div>
+<div id="graph-structure.-indirection" class="slide section level1">
+<h1>Graph structure. Indirection</h1>
+<ul>
+<li><p>Represent nodes as ints, edges as pairs</p></li>
+<li><p>Corresponds to usual definition of the graph as two sets</p></li>
+</ul>
+<pre><code>data Graph = Graph
+  { nodes :: [Int]
+  , edges :: [(Int, Int)]
+  }
+
+g1 = Graph
+  { nodes = [1,2]
+  , edges = [(1,2), (2,1)]
+  }</code></pre>
+<ul>
+<li><p>Easy to represent cycles.</p></li>
+<li>But:
+<ul>
+<li>it is not an algebraic recursive data type as we'd expect</li>
+<li>no pattern matching like in lists or trees</li>
+</ul></li>
+</ul>
+</div>
+<div id="graph-structure-another-approach" class="slide section level1">
+<h1>Graph structure, another approach</h1>
+<pre><code>data Node a = Node a [Node a]
+data Graph a = Graph [Node a]</code></pre>
+<div class="figure">
+<img src="tree-dag-graph-125.png" />
+</div>
+</div>
+<div id="graph-structure" class="slide section level1">
+<h1>Graph structure</h1>
+<ul>
+<li><p>Not so fast. Cycles are tricky. Sharing is tricky.</p></li>
+<li><p>We can represent DAGs using sharing, but this sharing is not observable.</p></li>
+<li><p>We can represent cycles using Haskell laziness and &quot;tying the knot&quot; technique, but it is fragile.</p></li>
+</ul>
+</div>
+<div id="graph-algorithms" class="slide section level1">
+<h1>Graph algorithms</h1>
+<ul>
+<li><p>First intuitive idea: mimicking imperative graph algorithms</p></li>
+<li><p>Imperative algorithms usually maintain additional data structure (e.g. to mark visited nodes)</p></li>
+<li>But:
+<ul>
+<li>we don't have convenient arrays with O(1) write</li>
+<li>maintaining state is somewhat painful</li>
+</ul></li>
+<li><p>Can we do better?</p></li>
+</ul>
+</div>
+<div id="inductive-graphs-idea" class="slide section level1">
+<h1>Inductive graphs idea</h1>
+<ul>
+<li><p>Introduced in &quot;Inductive graphs. Functional graph algorithms&quot; paper by Martin Erwig.</p></li>
+<li><p>Limitations of previous approaches are caused by monolotic representation of graphs. The algorithms are bulky and need to keep track additional information regarding to traversal.</p></li>
+<li><p>Algorithms on lists and trees are elegant and easy to reason about.</p></li>
+<li><p>Inductive graphs: an inductive data structure with two constructors similar to lists or trees.</p></li>
+<li><p>Profit: we can use pattern matching and immediately express and reason about simple algorithms (reversing the edges, calculating nodes, etc.).</p></li>
+<li><p>This idea has been implemented in &quot;fgl&quot; library by Martin Erwig included in Haskell platform. FGL = functional graph library.</p></li>
+</ul>
+</div>
+<div id="types" class="slide section level1">
+<h1>Types</h1>
+<pre><code>type Node = Int
+type Adj e = [(e, Node)]
+type Context v e = (Adj e, Node, v, Adj e)
+
+data Graph v e
+  = Empty
+  | Context v e :&amp;: Graph v e</code></pre>
+<ul>
+<li><p>Akin to lists we either have an empty graph or an extension of the graph with a <strong>context</strong></p></li>
+<li><p>Context v e: v and e are types for labels (for vertices and edges)</p></li>
+<li><p>Context represents a node, its label and its inbound and outbound edges</p></li>
+</ul>
+</div>
+<div id="context-example" class="slide section level1">
+<h1>Context example</h1>
+<div class="figure">
+<img src="context-advanced.png" />
+</div>
+<pre><code>context of node 1 = ([(2, &quot;e1&quot;)], 1, &quot;A&quot;, [(4, &quot;e4&quot;)])</code></pre>
+</div>
+<div id="contexts-order" class="slide section level1">
+<h1>Contexts order</h1>
+<ul>
+<li>The order of inserting contexts is not unique</li>
+</ul>
+<div class="figure">
+<img src="context-order.png" />
+</div>
+<pre><code>([(&quot;left&quot;, 2), (&quot;up&quot;, 3)], 1, &#39;a&#39;, [(&quot;right&quot;, 2)])
+&amp;
+([], 2, &#39;b&#39;, [(&quot;down&quot;, 3)])
+&amp;
+([], 3, &#39;c&#39;, [])
+&amp;
+Empty</code></pre>
+</div>
+<div id="pattern-matching-on-graphs" class="slide section level1">
+<h1>Pattern matching on graphs</h1>
+<ul>
+<li>Inductive structures give pattern matching</li>
+</ul>
+<pre><code>isEmpty :: Graph v e -&gt; Bool
+isEmpty Empty = True
+isEmpty _ = False
+
+gmap :: (Context v1 e1 -&gt; Context v2 e2) -&gt; Graph v1 e1 -&gt; Graph v2 e2
+gmap _f Empty = Empty
+gmap f (c :&amp;: g) = f c :&amp;: gmap f g
+
+grev :: Graph v e -&gt; Graph v e
+grev = gmap swap where swap (i, n, v, o) = (o, n, v, i)</code></pre>
+</div>
+<div id="proofs" class="slide section level1">
+<h1>Proofs</h1>
+<ul>
+<li>Using this style it is easy to prove things</li>
+</ul>
+<pre><code>grev (grev g) = g
+
+gmap f . gmap g = gmap (f . g)             (1)
+swap . swap = id                           (2)</code></pre>
+</div>
+<div id="unordered-fold-and-its-usage" class="slide section level1">
+<h1>Unordered fold and its usage</h1>
+<pre><code>ufold :: (Context v e -&gt; acc -&gt; acc) -&gt; acc -&gt; Graph v e -&gt; acc
+ufold _ acc Empty = acc
+ufold f acc (c :&amp;: g) = f c (ufold f acc g)
+
+gmap = ufold (\c -&gt; (f c :&amp;:)) Empty
+
+nodes :: Graph v e -&gt; [Node]
+nodes = ufold (\(_,v,_,_) -&gt; (v:)) []
+
+undir :: Graph v e -&gt; Graph v e
+undir = gmap (\(p,v,l,s) -&gt; let ps = nub (p ++ s) in (ps,v,l,ps))</code></pre>
+</div>
+<div id="pattern-matches" class="slide section level1">
+<h1>Pattern matches</h1>
+<ul>
+<li><p>For efficiency reasons Graph is an abstract type, so we have to use a smart constructor (&amp;) instead of constructor (:&amp;:)</p></li>
+<li><p>To facilitate this we have the following functions:</p></li>
+</ul>
+<pre><code>isEmpty :: Graph v e -&gt; Bool
+
+-- matchAny extracts any context from the graph
+matchAny :: Graph v e -&gt; (Context v e, Graph v e)
+
+-- unordered graph handling idiom
+gmap f g | isEmpty g = g
+         | otherwise = f c &amp; (gmap f g&#39;)
+           where (c, g&#39;) = matchAny g</code></pre>
+</div>
+<div id="ordered-pattern-matches" class="slide section level1">
+<h1>Ordered pattern matches</h1>
+<pre><code>-- match decomposes a graph into a context for particular node and the rest of the graph
+match :: Node -&gt; Graph v e -&gt; (Maybe (Context v e), Graph v e)
+
+-- usage example
+f v g = case match v g of
+  (Nothing, g&#39;) -&gt; e1
+  (Just c, g&#39;)  -&gt; e2
+</code></pre>
+</div>
+<div id="example" class="slide section level1">
+<h1>Example</h1>
+<div class="figure">
+<img src="match-1.png" />
+</div>
+</div>
+<div id="functional-graph-algorithms.-dfs." class="slide section level1">
+<h1>Functional graph algorithms. DFS.</h1>
+<ul>
+<li><p>Depth first search: useful algorithm which is a base for many other algorithms (topological sort, SCC, etc.)</p></li>
+<li><p>Idea: visit each node in a graph once by visiting successors <strong>before</strong> siblings.</p></li>
+<li><p>Input: we provide a list of nodes, it is needed if graph contains several components.</p></li>
+<li><p>Output: a list of nodes in traversal order.</p></li>
+</ul>
+<pre><code>dfs :: [Node] -&gt; Graph v e -&gt; [Node]
+dfs [] _ = []
+dfs (v:vs) g = case match v g of
+  (Just c, g&#39;) = v : dfs (suc c ++ vs) g&#39;
+  (Nothing, g&#39;) -&gt; dfs vs g&#39;</code></pre>
+<ul>
+<li>Note how we use decomposition of graph with <code>match</code> to avoid visiting the same node more than once. When context of the node is matched, we return the rest of the graph which does not contain this node anymore.</li>
+</ul>
+</div>
+<div id="dfs-to-bfs." class="slide section level1">
+<h1>DFS to BFS.</h1>
+<ul>
+<li>It's quite easy to turn DFS into BFS.</li>
+</ul>
+<pre><code>dfs :: [Node] -&gt; Graph v e -&gt; [Node]
+dfs [] _ = []
+dfs (v:vs) g = case match v g of
+  (Just c, g&#39;) = v : dfs (suc c ++ vs) g&#39;
+  (Nothing, g&#39;) -&gt; dfs vs g&#39;</code></pre>
+</div>
+<div id="dfs-to-bfs.-1" class="slide section level1">
+<h1>DFS to BFS.</h1>
+<ul>
+<li>It's quite easy to turn DFS into BFS.</li>
+</ul>
+<pre><code>bfs :: [Node] -&gt; Graph v e -&gt; [Node]
+bfs [] _ = []
+bfs (v:vs) g = case match v g of
+  (Just c, g&#39;) = v : bfs (vs ++ suc c) g&#39;
+  (Nothing, g&#39;) -&gt; bfs vs g&#39;</code></pre>
+</div>
+<div id="dfs-to-bfs.-2" class="slide section level1">
+<h1>DFS to BFS.</h1>
+<ul>
+<li>It's quite easy to turn DFS into BFS.</li>
+</ul>
+<pre><code>bfs :: [Node] -&gt; Graph v e -&gt; [Node]
+bfs [] _ = []
+bfs (v:vs) g = case match v g of
+  (Just c, g&#39;) -&gt; v : bfs (vs ++ suc c) g&#39;
+  (Nothing, g&#39;) -&gt; bfs vs g&#39;</code></pre>
+<ul>
+<li>However, using lists for queues is inefficient, so practically BFS is implemented using better queues (with O(1) enqueue and dequeue)</li>
+</ul>
+</div>
+<div id="dff" class="slide section level1">
+<h1>DFF</h1>
+<ul>
+<li><p>DFF = depth first search spanning forest.</p></li>
+<li><p>DFF is a forest (list of tree) which contain nodes in the order of depth first search traversal.</p></li>
+<li><p>DFF is used in topological sort and strongly connected components algorithms</p></li>
+</ul>
+<pre><code>data Tree a = Br a [Tree a]
+
+dff :: [Node] -&gt; Graph v e -&gt; [Tree Node]</code></pre>
+</div>
+<div id="dff-example" class="slide section level1">
+<h1>DFF example</h1>
+<div class="figure">
+<img src="dff.png" />
+</div>
+</div>
+<div id="dfs-based-algorithms" class="slide section level1">
+<h1>DFS-based algorithms</h1>
+<ul>
+<li>We compose functions, instead of changing/tuning the DFS routine (as it is usually done in imperative algorithms)</li>
+</ul>
+<pre><code>-- Toppological sort is a reversed post-order on DFS
+topsort :: Graph v e -&gt; [Node]
+topsort = reverse . concatMap postOrder . dff
+
+-- Kosaraju-Sharir algorithm for strongly connected components
+scc :: Graph v e -&gt; [Tree Node]
+scc g = dff (topsort g) (grev g)</code></pre>
+<ul>
+<li>Nice and elegant!</li>
+</ul>
+</div>
+<div id="complexity-and-internals" class="slide section level1">
+<h1>Complexity and internals</h1>
+<ul>
+<li><p>There are several implementations: based on trees and Patricia trees (Data.IntMap).</p></li>
+<li><p>We'd like to have composition and decomposition of the graph to be constant or at least sublinear.</p></li>
+<li><p>Data.IntMap insert, delete and adjust has O(min(log n, W)) worstcase where W is number of bits in Int (32 or 64).</p></li>
+<li><p>Composition and decomposition of the graph (&amp; and match) are still linear in terms of the vertex degree, since we have to handle all edges.</p></li>
+<li><p>Overall, theoretical complexity of provided implementations are not great, but according to the paper works well in practice.</p></li>
+</ul>
+</div>
+<div id="other-algorithms-in-fgl" class="slide section level1">
+<h1>Other algorithms in FGL</h1>
+<ul>
+<li>18 (!) flavours of DFS/DFF (parameterized by pretty much everything)</li>
+<li>Topological sort/SCC/reachable and other algorithms based on DFS</li>
+<li>BFS</li>
+<li>Biconnected components</li>
+<li>Minimum spanning trees</li>
+<li>Shortest paths</li>
+<li>Maximum flows</li>
+<li>Articulation points</li>
+<li>Dominators</li>
+<li>Voronoi diagrams</li>
+<li>Transitive closures</li>
+</ul>
+</div>
+<div id="fgl-on-hackage" class="slide section level1">
+<h1>FGL on hackage</h1>
+<div class="figure">
+<img src="hackage.png" />
+</div>
+</div>
+<div id="summary" class="slide section level1">
+<h1>Summary</h1>
+<ul>
+<li><p>The major selling point of FGL is its API</p></li>
+<li><p>FGL provides rich and convenient API a la algebraic data types</p></li>
+<li><p>API facilitates expressing graph algorithms in terms of recursive definitions</p></li>
+</ul>
+</div>
+<div id="other-graph-libraries" class="slide section level1">
+<h1>Other graph libraries</h1>
+<ul>
+<li>Data.Graph from &quot;containers&quot; package</li>
+<li>some minimalist library from Edward Kmett</li>
+<li>libraries for specialized graphs</li>
+</ul>
+</div>
+<div id="references" class="slide section level1">
+<h1>References</h1>
+<ol style="list-style-type: decimal">
+<li><p><a href="http://web.engr.oregonstate.edu/~erwig/papers/InductiveGraphs_JFP01.pdf">Martin Erwig. Inductive graphs and functional graph algorithms</a></p></li>
+<li><p><a href="https://hackage.haskell.org/package/fgl-5.4.2.4">fgl on hackage</a></p></li>
+<li><p><a href="http://stackoverflow.com/questions/9732084/how-do-you-represent-a-graph-in-haskell">StackOverflow: How do you represent a graph in Haskell?</a></p></li>
+<li><p><a href="https://class.coursera.org/algs4partII-003">Algorithms course on Coursera (covers graph algorithms)</a></p></li>
+</ol>
+</div>
+<div id="thank-you" class="slide section level1">
+<h1>Thank you!</h1>
+</div>
+</body>
+</html>
